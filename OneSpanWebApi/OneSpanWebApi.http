@@ -1,0 +1,6 @@
+@Oswapi_HostAddress = http://localhost:5236
+
+GET {{Oswapi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
