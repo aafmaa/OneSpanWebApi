@@ -33,7 +33,7 @@ namespace OneSpanWebApi.Tests
             var configuration = new ConfigurationBuilder()
                 .AddInMemoryCollection(new Dictionary<string, string>
                 {
-                   { "ConnectionStrings:DefaultConnection", "Server=myServerAddress;Database=myDataBase;User Id=myUsername;Password=myPassword;"}
+                   { "ConnectionStrings:DefaultConnection", "Server=DEV-MSSQL12-A.DEV.LOCAL;Database=MemberOnlineApp;uid=PublicWeb_User; pwd=Neverever101;Trusted_Connection=True;TrustServerCertificate=True;"}
                 })
                 .Build();
 
@@ -51,6 +51,7 @@ namespace OneSpanWebApi.Tests
                 SignerEmail = "natashagor@hotmail.com",
                 DateOfBirth = "01/15/1980",
                 Last4SSN = "1234",
+                DesignationId = "454464654",
                 PdfFieldValues = new Dictionary<string, string>
                    {
                        { "OwnerName", "John Doe" },
