@@ -1,5 +1,9 @@
+using OneSpanWebApi.Data;
 using OneSpanWebApi.Services;
 using Serilog;
+using OneSpanWebApi.Models;
+using Microsoft.Identity.Web;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -12,6 +16,10 @@ Log.Logger = new LoggerConfiguration()
 builder.Host.UseSerilog();
 
 // Add services to the container.
+builder.Services.AddSingleton<DBConnectionFactory>();
+builder.Services.AddSingleton<OneSpanService>();
+
+// Add the necessary using directive for the namespace containing DbConnectionFactory  
 
 builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
@@ -24,6 +32,11 @@ builder.Services.Configure<OneSpanOptions>(builder.Configuration.GetSection("One
 // Register the OneSpanService with dependency injection
 builder.Services.AddTransient<OneSpanService>();
 
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddMicrosoftIdentityWebApi(builder.Configuration.GetSection("AzureAd"));
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -34,9 +47,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
+app.UseAuthentication();
 app.UseAuthorization();
-
 app.MapControllers();
-
 app.Run();

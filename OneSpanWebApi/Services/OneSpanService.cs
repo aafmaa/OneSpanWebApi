@@ -2,6 +2,10 @@
 using Microsoft.Extensions.Options;
 using OneSpanSign.Sdk;
 using OneSpanSign.Sdk.Builder;
+using OneSpanWebApi.Data;
+using OneSpanWebApi.Models;
+using OneSpanWebApi.Data;
+using System;
 
 namespace OneSpanWebApi.Services
 {
@@ -11,9 +15,12 @@ namespace OneSpanWebApi.Services
         private readonly string _apiUrl;
         private readonly string _docPath;
         private readonly string _apiKey;
+        private readonly string _senderEmail;
         private readonly ILogger<OneSpanService> _logger;
+        private readonly OssClient _ossClient;
+        private readonly DBConnectionFactory _dbConnectionFactory;
 
-        public OneSpanService(IOptions<OneSpanOptions> options, ILogger<OneSpanService> logger)
+        public OneSpanService(IOptions<OneSpanOptions> options, ILogger<OneSpanService> logger, DBConnectionFactory dbConnectionFactory)
         {
             var config = options.Value;
             _baseApiUrl = config.BaseApiUrl;
@@ -21,6 +28,9 @@ namespace OneSpanWebApi.Services
             _docPath = config.DocPath;
             _apiKey = config.ApiKey;
             _logger = logger;
+            _senderEmail = config.SenderEmail;
+            _ossClient = new OssClient(_apiKey, _apiUrl);
+            _dbConnectionFactory = dbConnectionFactory;
         }
 
         //private static String BASE_API_URL = "https://sandbox.esignlive.com";
@@ -28,69 +38,96 @@ namespace OneSpanWebApi.Services
         //private static string DOC_PATH = @"C:\Users\ngorbatovskikh\source\repos\OneSpanApiService\OneSpanApiService\Docs";
         //private static String API_KEY = "SFZtWUpiS1h3SGNIOmw2azJrMllyOGFJWg==";
 
-        public string GetSignature()
+        public string GetSignature(BeneficiaryRequest beneficiaryRequest)
         {
             _logger.LogInformation("Starting GetSignature");
             try
             {
-                OssClient ossClient = new OssClient(_apiKey, _apiUrl);
-            string path = _docPath + @"\MemberApplication_27600.pdf";
-            FileStream fs = File.OpenRead(path);
-            FieldBuilder date = FieldBuilder.SignatureDate();
-            date.WithPositionExtracted();
-            date.WithName("Signer1.Date");
+                string path = Path.Combine(_docPath, "Beneficiary Designation.pdf");
+                
+                FileStream fs = File.OpenRead(path);
+                FieldBuilder date = FieldBuilder.SignatureDate();
+                date.WithPositionExtracted();
+                date.WithName("Signer1.Date");
 
-            FieldBuilder date2 = FieldBuilder.SignatureDate();
-            date2.WithPositionExtracted();
-            date2.WithName("Signer2.Date2");
+                //FieldBuilder date2 = FieldBuilder.SignatureDate();
+                //date2.WithPositionExtracted();
+                //date2.WithName("Signer2.Date2");
 
-            DocumentPackage superDuperPackage = PackageBuilder
-            .NewPackageNamed("Test Package .NET")
-            .WithEmailMessage("Hello Dear Signer. This is custom email message")
-            .WithSenderInfo(SenderInfoBuilder.NewSenderInfo("ngorbatovskikh@metrostar.com")) //sender invitation needs to be added thru portal under senders tab. this was returnong error - not sure if we can assign sender dynamically
-            .WithSettings(DocumentPackageSettingsBuilder.NewDocumentPackageSettings()
-                    //.WithoutWatermark()
-                    )
-            .WithSigner(SignerBuilder.NewSignerWithEmail("ngorbatovskikh@aafmaa.com")
-                    .WithFirstName("Ann")
-                    .WithLastName("Smith")
-                  )
-            .WithDocument(DocumentBuilder.NewDocumentNamed("SimpleTerm")
-                    .FromStream(fs, DocumentType.PDF)
-                    .EnableExtraction()
-            .WithSignature(SignatureBuilder
-                    .SignatureFor("ngorbatovskikh@aafmaa.com")
-                    .WithName("Signer1.Fullname1") //reference: https://community.onespan.com/documentation/onespan-sign/guides/feature-guides/developer/document-extraction
-                    .WithPositionExtracted()
-                    .WithField(date)
-                    )
-             .WithSignature(SignatureBuilder
-                    .SignatureFor("ngorbatovskikh@aafmaa.com")
-                    .WithName("Signer2.Fullname2") //reference: https://community.onespan.com/documentation/onespan-sign/guides/feature-guides/developer/document-extraction
-                    .WithPositionExtracted()
-                    .WithField(date2)
-                    .WithStyle(SignatureStyle.HAND_DRAWN)
-                    )
+                DocumentPackage superDuperPackage = PackageBuilder
+                .NewPackageNamed("Beneficiary Designation Form")
+                .WithEmailMessage("Hello Dear Signer. This is custom email message")
+                .WithSenderInfo(SenderInfoBuilder.NewSenderInfo(_senderEmail)) //sender invitation needs to be added thru portal under senders tab. this was returnong error - not sure if we can assign sender dynamically
+                .WithSettings(DocumentPackageSettingsBuilder.NewDocumentPackageSettings()
+                        //.WithoutWatermark()
+                        )
+                .WithSigner(SignerBuilder.NewSignerWithEmail(beneficiaryRequest.SignerEmail)
+                        .WithFirstName(beneficiaryRequest.SignerFirstName)
+                        .WithLastName(beneficiaryRequest.SignerLastName)
+                        .ChallengedWithQuestions(
+                            ChallengeBuilder.FirstQuestion("What is your date of birth?").Answer(beneficiaryRequest.DateOfBirth)
+                                            .SecondQuestion("What are the last 4 digits of your SSN?").Answer(beneficiaryRequest.Last4SSN)
+                        )
+                      )
+                .WithDocument(DocumentBuilder.NewDocumentNamed("Beneficiary Designation")
+                        .FromStream(fs, DocumentType.PDF)
+                        .EnableExtraction()
+                .WithSignature(SignatureBuilder
+                        .SignatureFor(beneficiaryRequest.SignerEmail)
+                        .WithName("Signer1.Fullname1") //reference: https://community.onespan.com/documentation/onespan-sign/guides/feature-guides/developer/document-extraction
+                        .WithPositionExtracted()
+                        .WithField(date)
+                        )
+                //.WithSignature(SignatureBuilder
+                //        .SignatureFor("ngorbatovskikh@aafmaa.com")
+                //        .WithName("Signer2.Fullname2") //reference: https://community.onespan.com/documentation/onespan-sign/guides/feature-guides/developer/document-extraction
+                //        .WithPositionExtracted()
+                //        .WithField(date2)
+                //        .WithStyle(SignatureStyle.HAND_DRAWN)
+                //        )
+                ).Build();
 
-            //.OnPage(1)
-            //.AtPosition(36 * 1.3, 1123-224*1.4))
-            //.WithSignature(SignatureBuilder
-            //        .SignatureFor("ngorbatovskikh@metrostar.com")
-            //        .OnPage(0)
-            //        .AtPosition(550, 165))
+                //Debug.WriteLine("superDuperPackage: " + superDuperPackage.ToString())
+                PackageId packageId = _ossClient.CreatePackageOneStep(superDuperPackage);
 
-            ).Build();
-            //Debug.WriteLine("superDuperPackage: " + superDuperPackage.ToString())
-            PackageId packageId = ossClient.CreatePackageOneStep(superDuperPackage);
-            ossClient.SendPackage(packageId);
+                _ossClient.SendPackage(packageId);
 
-            return packageId.ToString();
+                // Save package ID to the database database
+                SaveSignaturePackageId(packageId.ToString(), beneficiaryRequest.SignerEmail);
+
+
+                return packageId.ToString();
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error in GetSignature");
                 throw;
             }
+        }
+
+        private void SaveSignaturePackageId(string packageId, string signerEmail)
+        {
+            using var connection = _dbConnectionFactory.CreateConnection();
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = "INSERT INTO SignaturePackages (PackageId, CreatedAt) VALUES (@PackageId, @CreatedAt)";
+
+            var packageIdParameter = command.CreateParameter();
+            packageIdParameter.ParameterName = "@PackageId";
+            packageIdParameter.Value = packageId;
+            command.Parameters.Add(packageIdParameter);
+
+            var createdAtParameter = command.CreateParameter();
+            createdAtParameter.ParameterName = "@CreatedAt";
+            createdAtParameter.Value = DateTime.UtcNow;
+            command.Parameters.Add(createdAtParameter);
+
+            var signerEmailParameter = command.CreateParameter();
+            signerEmailParameter.ParameterName = "@SignerEmail";
+            signerEmailParameter.Value = signerEmail;
+            command.Parameters.Add(signerEmailParameter);
+
+            command.ExecuteNonQuery();
         }
 
         public void createPackageFromTemplate()
@@ -135,15 +172,43 @@ namespace OneSpanWebApi.Services
 
         }
 
-        public void downloadDocument(string packageId)
-        {
-            OssClient ossClient = new OssClient(_apiKey, _apiUrl);
-            PackageId pkgId = new PackageId(packageId);
-            byte[] content = ossClient.DownloadZippedDocuments(pkgId);
-            string fileLocation = @$"{_docPath}\SignedDocs\{pkgId}_{DateTime.Now.ToString("yyyy_MM_dd")}.zip";
-            //Debug.WriteLine("file save path: " + fileLocation);
-            File.WriteAllBytes(fileLocation, content);
+        //public void downloadDocument(string packageId)
+        //{
+        //    //OssClient ossClient = new OssClient(_apiKey, _apiUrl);
+        //    PackageId pkgId = new PackageId(packageId);
+        //    byte[] content = _ossClient.DownloadZippedDocuments(pkgId);
+        //    string fileLocation = @$"{_docPath}\Completed\{pkgId}_{DateTime.Now.ToString("yyyy_MM_dd")}.zip";
+        //    //Debug.WriteLine("file save path: " + fileLocation);
+        //    File.WriteAllBytes(fileLocation, content);
 
+        //}
+
+        public async Task<string> DownloadSignedDocumentAsync(string packageId)
+        {
+            var documents = _ossClient.PackageService.DownloadZippedDocuments(new PackageId(packageId));
+            var tempPath = Path.Combine(Path.GetTempPath(), $"{packageId}_Signed.zip");
+
+            await using var fs = new FileStream(tempPath, FileMode.Create, FileAccess.Write);
+            await fs.WriteAsync(documents, 0, documents.Length); // Fix: Use WriteAsync to write the byte array to the file stream.
+
+            return tempPath;
+        }
+
+        public async Task CancelPackageAsync(string designationId)
+        { 
+            try
+            {
+                _logger.LogInformation($"Canceling package with designation ID: {designationId}");
+
+                //retrieve packageId based on designation Id
+                PackageId packageId = new PackageId("hsgfhgsf");
+                await Task.Run(() => _ossClient.PackageService.DeletePackage(packageId));
+            } 
+            catch(Exception ex)
+            {
+                _logger.LogError(ex, $"Error canceling package with designation ID: {designationId}");
+                throw;
+            }
         }
     }
 }

@@ -6,6 +6,9 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging.Abstractions;
+using OneSpanWebApi.Models;
+using OneSpanWebApi.Data;
+using Microsoft.Extensions.Configuration;
 
 namespace OneSpanWebApi.Tests
 {
@@ -14,21 +17,54 @@ namespace OneSpanWebApi.Tests
         [Fact]
         public void GetSignature_ReturnsPackageIdString()
         {
-            // Arrange
+            // Arrange    
             var options = Options.Create(new OneSpanOptions
             {
                 BaseApiUrl = "https://sandbox.esignlive.com",
                 ApiKey = "SFZtWUpiS1h3SGNIOmw2azJrMllyOGFJWg==",
-                DocPath = @"C:\Users\ngorbatovskikh\source\repos\OneSpanApiService\OneSpanApiService\Docs"
+                DocPath = @"C:\Users\ngorbatovskikh\source\repos\OneSpanWebApi\OneSpanWebApi\Templates",
+                SenderEmail = "ngorbatovskikh@metrostar.com",
+                CallbackKey = "a42379d0-16af-47f7-a298-a8585703f294"
             });
 
             var logger = NullLogger<OneSpanService>.Instance;
-            var service = new OneSpanService(options, logger);
 
-            // Act
-            var result = service.GetSignature();
+            // Create a mock IConfiguration object
+            var configuration = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string>
+                {
+                   { "ConnectionStrings:DefaultConnection", "Server=myServerAddress;Database=myDataBase;User Id=myUsername;Password=myPassword;"}
+                })
+                .Build();
 
-            // Assert
+            // Pass the IConfiguration object to DBConnectionFactory
+            var dbConnectionFactory = new DBConnectionFactory(configuration);
+
+            var service = new OneSpanService(options, logger, dbConnectionFactory);
+
+            // Create a mock or sample BeneficiaryRequest object    
+            var beneficiaryRequest = new BeneficiaryRequest
+            {
+                // Correctly populate the required properties of BeneficiaryRequest  
+                SignerFirstName = "Ann1",
+                SignerLastName = "Smith1",
+                SignerEmail = "natashagor@hotmail.com",
+                DateOfBirth = "01/15/1980",
+                Last4SSN = "1234",
+                PdfFieldValues = new Dictionary<string, string>
+                   {
+                       { "OwnerName", "John Doe" },
+                       { "PolNumber", "12345678" },
+                       { "P1Nam", "Jane Smith" },
+                       { "P1Rel", "Spouse" },
+                       { "P1%", "100" }
+                   }
+            };
+
+            // Act    
+            var result = service.GetSignature(beneficiaryRequest);
+
+            // Assert    
             Assert.False(string.IsNullOrWhiteSpace(result));
         }
     }
