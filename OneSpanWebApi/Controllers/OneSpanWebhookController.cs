@@ -41,9 +41,9 @@ namespace OneSpanWebApi.Controllers
                     string? documentId = docInfo["documentId"]?.ToString();
                     string? createdDate = docInfo["createdDate"]?.ToString();
 
-                    if (!string.IsNullOrEmpty(packageId))
+                    if (!string.IsNullOrEmpty(packageId))// && !string.IsNullOrEmpty(documentId))
                     {
-                        string path = await _oneSpanService.DownloadSignedDocumentAsync(packageId);
+                        string path = await _oneSpanService.DownloadSignedDocumentAsync(packageId, documentId);
                     }
                 }
                 return Ok();

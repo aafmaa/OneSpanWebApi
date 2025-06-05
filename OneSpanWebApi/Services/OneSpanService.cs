@@ -39,7 +39,7 @@ namespace OneSpanWebApi.Services
             _logger.LogInformation("Starting GetSignature");
             try
             {
-                string path = Path.Combine(_docPath, "Beneficiary Designation.pdf");
+                string path = Path.Combine(_docPath, "Templates\\Beneficiary Designation.pdf");
                 
                 FileStream fs = File.OpenRead(path);
                 FieldBuilder date = FieldBuilder.SignatureDate();
@@ -48,7 +48,7 @@ namespace OneSpanWebApi.Services
 
                 DocumentPackage superDuperPackage = PackageBuilder
                 .NewPackageNamed("Beneficiary Designation Form")
-                .WithEmailMessage("Hello Dear Signer. This is custom email message")
+                //.WithEmailMessage("Hello Dear Signer. This is custom email message")
                 .WithSenderInfo(SenderInfoBuilder.NewSenderInfo(_senderEmail)) //sender invitation needs to be added thru portal under senders tab. this was returnong error - not sure if we can assign sender dynamically
                 .WithSettings(DocumentPackageSettingsBuilder.NewDocumentPackageSettings()
                         //.WithoutWatermark()
@@ -133,15 +133,28 @@ namespace OneSpanWebApi.Services
             }
         }
 
-        public async Task<string> DownloadSignedDocumentAsync(string packageId)
+        public async Task<string> DownloadSignedDocumentAsync(string packageId, string documentid)
         {
-            var documents = _ossClient.PackageService.DownloadZippedDocuments(new PackageId(packageId));
-            var tempPath = Path.Combine(Path.GetTempPath(), $"{packageId}_Signed.zip");
+            try
+            {
+                _logger.LogInformation("Starting DownloadSignedDocumentAsync for PackageId={PackageId}", packageId);
 
-            await using var fs = new FileStream(tempPath, FileMode.Create, FileAccess.Write);
-            await fs.WriteAsync(documents, 0, documents.Length); // Fix: Use WriteAsync to write the byte array to the file stream.
+                var documents = _ossClient.PackageService.DownloadZippedDocuments(new PackageId(packageId));
 
-            return tempPath;
+                var document = _ossClient.PackageService.DownloadDocument(new PackageId(packageId), documentid);
+                string path = Path.Combine(_docPath, $"Documents\\Completed\\{packageId}_Signed.zip");
+                
+                await using var fs = new FileStream(path, FileMode.Create, FileAccess.Write);
+                await fs.WriteAsync(documents, 0, documents.Length); // Fix: Use WriteAsync to write the byte array to the file stream.
+
+                _logger.LogInformation("Signed document downloaded and saved to {TempPath} for PackageId={PackageId}", path, packageId);
+                return path;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error downloading signed document for PackageId={PackageId}", packageId);
+                throw;
+            }
         }
 
         public async Task CancelPackageAsync(string designationId)
@@ -151,8 +164,16 @@ namespace OneSpanWebApi.Services
                 _logger.LogInformation($"Canceling package with designation ID: {designationId}");
 
                 //retrieve packageId based on designation Id
-                PackageId packageId = new PackageId("hsgfhgsf");
-                await Task.Run(() => _ossClient.PackageService.DeletePackage(packageId));
+                string? packageid = this.GetPackageId(designationId);
+                if (!string.IsNullOrEmpty(packageid))
+                {
+                    PackageId packageId = new PackageId(packageid);
+                    await Task.Run(() => _ossClient.PackageService.DeletePackage(packageId));
+                }
+                else 
+                {
+                    _logger.LogError($"Error canceling package with designation ID: {designationId} due to package id being returned empty from the database");
+                }
             }
             catch (Exception ex)
             {
@@ -160,6 +181,41 @@ namespace OneSpanWebApi.Services
                 throw;
             }
         }
+
+        public string? GetPackageId(string designationId)
+        {
+            try
+            {
+                using var connection = _dbConnectionFactory.CreateConnection();
+                connection.Open();
+                using var command = connection.CreateCommand();
+                command.CommandText = "OneSpanPackage_GetPackageId";
+                command.CommandType = System.Data.CommandType.StoredProcedure;
+
+                var designationIdParameter = command.CreateParameter();
+                designationIdParameter.ParameterName = "@DesignationId";
+                designationIdParameter.Value = int.TryParse(designationId, out var id) ? id : (object)DBNull.Value;
+                command.Parameters.Add(designationIdParameter);
+
+                var result = command.ExecuteScalar();
+                if (result != null && result != DBNull.Value)
+                {
+                    _logger.LogInformation("Retrieved PackageId={PackageId} for DesignationId={DesignationId}", result.ToString(), designationId);
+                    return result.ToString();
+                }
+                else
+                {
+                    _logger.LogWarning("No PackageId found for DesignationId={DesignationId}", designationId);
+                    return null;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving PackageId for DesignationId={DesignationId}", designationId);
+                throw;
+            }
+        }
+
 
         //public void createPackageFromTemplate()
         //{
