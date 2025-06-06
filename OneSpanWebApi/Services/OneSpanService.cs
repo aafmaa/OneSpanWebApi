@@ -39,7 +39,7 @@ namespace OneSpanWebApi.Services
             _logger.LogInformation("Starting GetSignature");
             try
             {
-                string path = Path.Combine(_docPath, "Templates\\Beneficiary Designation.pdf");
+                string path = Path.Combine(_docPath, "Templates", "Beneficiary Designation.pdf");
                 
                 FileStream fs = File.OpenRead(path);
                 FieldBuilder date = FieldBuilder.SignatureDate();
@@ -79,7 +79,7 @@ namespace OneSpanWebApi.Services
                 _ossClient.SendPackage(packageId);
 
                 // Save package ID to the database database
-                SaveSignaturePackageId(packageId.ToString(), beneficiaryRequest.SignerEmail, beneficiaryRequest.DesignationId);
+                SaveSignaturePackageId(packageId.ToString(), beneficiaryRequest);
 
 
                 return packageId.ToString();
@@ -91,7 +91,7 @@ namespace OneSpanWebApi.Services
             }
         }
 
-        private void SaveSignaturePackageId(string packageId, string signerEmail, string designationId)
+        private void SaveSignaturePackageId(string packageId, BeneficiaryRequest beneficiaryRequest)
         {
             try 
             { 
@@ -108,7 +108,7 @@ namespace OneSpanWebApi.Services
 
                 var designationIdParameter = command.CreateParameter();
                 designationIdParameter.ParameterName = "@DesignationId";
-                designationIdParameter.Value = int.TryParse(designationId, out var id) ? id : (object)DBNull.Value;
+                designationIdParameter.Value = int.TryParse(beneficiaryRequest.DesignationId, out var id) ? id : (object)DBNull.Value;
                 command.Parameters.Add(designationIdParameter);
 
                 var createdAtParameter = command.CreateParameter();
@@ -118,17 +118,52 @@ namespace OneSpanWebApi.Services
 
                 var signerEmailParameter = command.CreateParameter();
                 signerEmailParameter.ParameterName = "@SignerEmail";
-                signerEmailParameter.Value = signerEmail ?? (object)DBNull.Value;
+                signerEmailParameter.Value = beneficiaryRequest.SignerEmail ?? (object)DBNull.Value;
                 command.Parameters.Add(signerEmailParameter);
+
+                var cnParameter = command.CreateParameter();
+                cnParameter.ParameterName = "@CN";
+                cnParameter.Value = beneficiaryRequest.CN;
+                command.Parameters.Add(cnParameter);
+
+                //set default value for Canceled field to 0 (false)
+                var canceledParameter = command.CreateParameter();
+                canceledParameter.ParameterName = "@Canceled";
+                canceledParameter.Value = 0;
+                command.Parameters.Add(canceledParameter);
 
                 command.ExecuteNonQuery();
 
-                _logger.LogInformation("Signature package id saved: PackageId={PackageId}, SignerEmail={SignerEmail}, DesignationId={DesignationId}", packageId, signerEmail, designationId);
-            
+                _logger.LogInformation("Signature package id saved: PackageId={PackageId}, SignerEmail={SignerEmail}, DesignationId={DesignationId}, CN={CN}, Canceled={Canceled}", packageId, beneficiaryRequest.SignerEmail, beneficiaryRequest.DesignationId, beneficiaryRequest.CN, 0);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error saving signature package: PackageId={PackageId}, SignerEmail={SignerEmail}, DesignationId={DesignationId}", packageId, signerEmail, designationId);
+                _logger.LogError(ex, "Error saving signature package: PackageId={PackageId}, SignerEmail={SignerEmail}, DesignationId={DesignationId}", packageId, beneficiaryRequest.SignerEmail, beneficiaryRequest.DesignationId);
+                throw;
+            }
+        }
+
+        public void UpdateSignaturePackageId(string designationId)
+        {
+            try
+            {
+                using var connection = _dbConnectionFactory.CreateConnection();
+                connection.Open();
+                using var command = connection.CreateCommand();
+                command.CommandText = "OneSpanPackage_UpdateCanceled";
+                command.CommandType = System.Data.CommandType.StoredProcedure;
+
+                var designationIdParameter = command.CreateParameter();
+                designationIdParameter.ParameterName = "@DesignationId";
+                designationIdParameter.Value = int.TryParse(designationId, out var id) ? id : (object)DBNull.Value;
+                command.Parameters.Add(designationIdParameter);
+
+                int rowsAffected = command.ExecuteNonQuery();
+                _logger.LogInformation("Updated Canceled field to true for DesignationId={DesignationId}. Rows affected: {RowsAffected}", designationId, rowsAffected);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating Canceled field for DesignationId={DesignationId}", designationId);
                 throw;
             }
         }
@@ -139,13 +174,13 @@ namespace OneSpanWebApi.Services
             {
                 _logger.LogInformation("Starting DownloadSignedDocumentAsync for PackageId={PackageId}", packageId);
 
-                var documents = _ossClient.PackageService.DownloadZippedDocuments(new PackageId(packageId));
+                //var documents = _ossClient.PackageService.DownloadZippedDocuments(new PackageId(packageId)); //use this if you want to download all documents in a package as a zip file
 
                 var document = _ossClient.PackageService.DownloadDocument(new PackageId(packageId), documentid);
-                string path = Path.Combine(_docPath, $"Documents\\Completed\\{packageId}_Signed.zip");
+                string path = Path.Combine(_docPath, $"Documents\\Completed\\{packageId}_Signed.pdf");
                 
                 await using var fs = new FileStream(path, FileMode.Create, FileAccess.Write);
-                await fs.WriteAsync(documents, 0, documents.Length); // Fix: Use WriteAsync to write the byte array to the file stream.
+                await fs.WriteAsync(document, 0, document.Length); // Fix: Use WriteAsync to write the byte array to the file stream.
 
                 _logger.LogInformation("Signed document downloaded and saved to {TempPath} for PackageId={PackageId}", path, packageId);
                 return path;
@@ -169,6 +204,9 @@ namespace OneSpanWebApi.Services
                 {
                     PackageId packageId = new PackageId(packageid);
                     await Task.Run(() => _ossClient.PackageService.DeletePackage(packageId));
+
+                    //updated the database, set Canceled field to true
+                    this.UpdateSignaturePackageId(designationId);
                 }
                 else 
                 {

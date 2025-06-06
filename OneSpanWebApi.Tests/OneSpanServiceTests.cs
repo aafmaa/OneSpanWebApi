@@ -22,28 +22,41 @@ namespace OneSpanWebApi.Tests
         [Fact]
         public void GetSignature_ReturnsPackageIdString()
         {
+            // Build configuration to include user secrets
+            var configuration = new ConfigurationBuilder()
+                .AddUserSecrets<OneSpanServiceTests>() // Loads secrets for this test project
+                .Build();
+
+            // Retrieve CallbackKey and ConnectionString from secrets
+            var callbackKey = configuration["Onespan:CallbackKey"];
+            var apiKey = configuration["Onespan:apiKey"];
+            var connectionString = configuration.GetConnectionString("DefaultConnection")
+                ?? configuration["ConnectionStrings:DefaultConnection"]; // fallback if needed
+
+
             // Arrange    
             var options = Options.Create(new OneSpanOptions
             {
                 BaseApiUrl = "https://sandbox.esignlive.com",
-                ApiKey = "SFZtWUpiS1h3SGNIOmw2azJrMllyOGFJWg==",
-                DocPath = @"C:\Users\ngorbatovskikh\source\repos\OneSpanWebApi\OneSpanWebApi\Templates",
+                ApiKey = apiKey, 
+                DocPath = @"C:\Users\ngorbatovskikh\source\repos\OneSpanWebApi\OneSpanWebApi\",
                 SenderEmail = "ngorbatovskikh@metrostar.com",
-                CallbackKey = "a42379d0-16af-47f7-a298-a8585703f294"
+                CallbackKey = callbackKey
             });
 
             var logger = NullLogger<OneSpanService>.Instance;
 
             // Create a mock IConfiguration object
-            var configuration = new ConfigurationBuilder()
-                .AddInMemoryCollection(new Dictionary<string, string>
+            // Build configuration with the connection string from secrets
+            var configWithConn = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                   { "ConnectionStrings:DefaultConnection", "Server=DEV-MSSQL12-A.DEV.LOCAL;Database=MemberOnlineApp;uid=PublicWeb_User; pwd=Neverever101;Trusted_Connection=True;TrustServerCertificate=True;"}
+            { "ConnectionStrings:DefaultConnection", connectionString }
                 })
                 .Build();
 
             // Pass the IConfiguration object to DBConnectionFactory
-            var dbConnectionFactory = new DBConnectionFactory(configuration);
+            var dbConnectionFactory = new DBConnectionFactory(configWithConn);
 
             var service = new OneSpanService(options, logger, dbConnectionFactory);
 
@@ -56,11 +69,12 @@ namespace OneSpanWebApi.Tests
                 SignerEmail = "natashagor@hotmail.com",
                 DateOfBirth = "01/15/1980",
                 Last4SSN = "1234",
-                DesignationId = "454464654",
+                DesignationId = "544346522",
+                CN = "12345",
                 PdfFieldValues = new Dictionary<string, string>
                    {
                        { "OwnerName", "John Doe" },
-                       { "PolNumber", "12345678" },
+                       { "PolNumber", "12345679" },
                        { "P1Nam", "Jane Smith" },
                        { "P1Rel", "Spouse" },
                        { "P1%", "100" }
@@ -77,37 +91,52 @@ namespace OneSpanWebApi.Tests
         [Fact]
         public async Task CancelPackageAsync_WithValidDesignationId_DeletesPackage()
         {
+            // Build configuration to include user secrets
+            var configuration = new ConfigurationBuilder()
+                .AddUserSecrets<OneSpanServiceTests>() // Loads secrets for this test project
+                .Build();
+
+            // Retrieve CallbackKey and ConnectionString from secrets
+            var callbackKey = configuration["Onespan:CallbackKey"];
+            var apiKey = configuration["Onespan:apiKey"];
+            var connectionString = configuration.GetConnectionString("DefaultConnection")
+                ?? configuration["ConnectionStrings:DefaultConnection"]; // fallback if needed
+
+
             // Arrange    
             var options = Options.Create(new OneSpanOptions
             {
                 BaseApiUrl = "https://sandbox.esignlive.com",
-                ApiKey = "SFZtWUpiS1h3SGNIOmw2azJrMllyOGFJWg==",
-                DocPath = @"C:\Users\ngorbatovskikh\source\repos\OneSpanWebApi\OneSpanWebApi\Templates",
+                ApiKey = apiKey,
+                DocPath = @"C:\Users\ngorbatovskikh\source\repos\OneSpanWebApi\OneSpanWebApi\",
                 SenderEmail = "ngorbatovskikh@metrostar.com",
-                CallbackKey = "a42379d0-16af-47f7-a298-a8585703f294"
+                CallbackKey = callbackKey
             });
 
             var logger = NullLogger<OneSpanService>.Instance;
 
             // Create a mock IConfiguration object
-            var configuration = new ConfigurationBuilder()
-                .AddInMemoryCollection(new Dictionary<string, string>
+            var configWithConn = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                   { "ConnectionStrings:DefaultConnection", "Server=DEV-MSSQL12-A.DEV.LOCAL;Database=MemberOnlineApp;uid=PublicWeb_User; pwd=Neverever101;Trusted_Connection=True;TrustServerCertificate=True;"}
+            { "ConnectionStrings:DefaultConnection", connectionString }
                 })
                 .Build();
 
             // Pass the IConfiguration object to DBConnectionFactory
-            var dbConnectionFactory = new DBConnectionFactory(configuration);
+            var dbConnectionFactory = new DBConnectionFactory(configWithConn);
 
             var service = new OneSpanService(options, logger, dbConnectionFactory);
 
-            var designationId = "454464654";
+            var designationId = "544646522";
             // Act    
             await service.CancelPackageAsync(designationId);
 
             // Assert    
             Assert.True(true);
         }
+
+     
+       
     }
 }

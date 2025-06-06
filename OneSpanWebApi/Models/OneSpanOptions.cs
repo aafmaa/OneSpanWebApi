@@ -1,4 +1,4 @@
-﻿namespace OneSpanWebApi.Services
+﻿namespace OneSpanWebApi.Models
 {
     public class OneSpanOptions
     {

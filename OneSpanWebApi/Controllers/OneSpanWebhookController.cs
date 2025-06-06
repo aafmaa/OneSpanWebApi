@@ -7,6 +7,7 @@ using OneSpanWebApi.Webhooks;
 using System.Net;
 using OneSpanSign.Sdk;
 using Microsoft.Extensions.Options;
+using OneSpanWebApi.Models;
 
 namespace OneSpanWebApi.Controllers
 {
@@ -41,7 +42,7 @@ namespace OneSpanWebApi.Controllers
                     string? documentId = docInfo["documentId"]?.ToString();
                     string? createdDate = docInfo["createdDate"]?.ToString();
 
-                    if (!string.IsNullOrEmpty(packageId))// && !string.IsNullOrEmpty(documentId))
+                    if (!string.IsNullOrEmpty(packageId) && eventName?.ToUpper() == "DOCUMENT_SIGNED" && !string.IsNullOrEmpty(documentId) && documentId.ToLower() != "default-consent")
                     {
                         string path = await _oneSpanService.DownloadSignedDocumentAsync(packageId, documentId);
                     }
