@@ -4,6 +4,8 @@ using Serilog;
 using OneSpanWebApi.Models;
 using Microsoft.Identity.Web;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using GemBox;
+using GemBox.Document;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,6 +20,7 @@ builder.Host.UseSerilog();
 // Add services to the container.
 builder.Services.AddSingleton<DBConnectionFactory>();
 builder.Services.AddSingleton<OneSpanService>();
+builder.Services.AddSingleton<IasService>();
 
 // Add the necessary using directive for the namespace containing DbConnectionFactory  
 
@@ -27,15 +30,34 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 // Configure OneSpan options from appsettings.json
-builder.Services.Configure<OneSpanOptions>(builder.Configuration.GetSection("OneSpan"));
+builder.Services.Configure<OneSpanConfig>(builder.Configuration.GetSection("OneSpan"));
 
 // Register the OneSpanService with dependency injection
 builder.Services.AddTransient<OneSpanService>();
+
+// Configure IasClient options from appsettings.json
+builder.Services.Configure<IasClientConfig>(builder.Configuration.GetSection("IasClient"));
+
+// Register the IasService with dependency injection
+builder.Services.AddScoped<IasService>();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddMicrosoftIdentityWebApi(builder.Configuration.GetSection("AzureAd"));
+
+//set GemBox license key
+string? licenseKeyDoc = builder.Configuration["GemBox:GemBoxDocumentLicense"];
+if (!string.IsNullOrEmpty(licenseKeyDoc))
+{
+    ComponentInfo.SetLicense(licenseKeyDoc);
+}
+else
+{
+    // Handle the case where the license key is null or empty.  
+    throw new InvalidOperationException("GemBox license key is not configured.");
+}
+//ComponentInfo.SetLicense("FREE-LIMITED-KEY");
 
 var app = builder.Build();
 

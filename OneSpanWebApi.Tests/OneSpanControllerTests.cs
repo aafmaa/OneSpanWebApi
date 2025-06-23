@@ -10,6 +10,15 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Moq;
+using Newtonsoft.Json.Linq;
+using OneSpanWebApi.Controllers;
+using OneSpanWebApi.Models;
+using OneSpanWebApi.Services;
 //using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace OneSpanWebApi.Tests
@@ -39,5 +48,6 @@ namespace OneSpanWebApi.Tests
             var content = await response.Content.ReadAsStringAsync();
             Assert.Contains("Package canceled", content);
         }
+
     }
 }

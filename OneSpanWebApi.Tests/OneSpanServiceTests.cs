@@ -6,6 +6,8 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging.Abstractions;
+// Fix for CS0234: Ensure the correct namespace is used for NullLogger.  
+using Microsoft.Extensions.Logging;
 using OneSpanWebApi.Models;
 using OneSpanWebApi.Data;
 using Microsoft.Extensions.Configuration;
@@ -33,56 +35,69 @@ namespace OneSpanWebApi.Tests
             var connectionString = configuration.GetConnectionString("DefaultConnection")
                 ?? configuration["ConnectionStrings:DefaultConnection"]; // fallback if needed
 
-
             // Arrange    
-            var options = Options.Create(new OneSpanOptions
+            var options = Options.Create(new OneSpanConfig
             {
                 BaseApiUrl = "https://sandbox.esignlive.com",
-                ApiKey = apiKey, 
+                ApiKey = apiKey,
                 DocPath = @"C:\Users\ngorbatovskikh\source\repos\OneSpanWebApi\OneSpanWebApi\",
                 SenderEmail = "ngorbatovskikh@metrostar.com",
-                CallbackKey = callbackKey
+                CallbackKey = callbackKey,
+                DocExperationDays = 1 // Set the expiration days for the document
             });
 
             var logger = NullLogger<OneSpanService>.Instance;
 
             // Create a mock IConfiguration object
-            // Build configuration with the connection string from secrets
             var configWithConn = new ConfigurationBuilder()
                 .AddInMemoryCollection(new Dictionary<string, string?>
                 {
-            { "ConnectionStrings:DefaultConnection", connectionString }
+                       { "ConnectionStrings:DefaultConnection", connectionString }
                 })
                 .Build();
 
             // Pass the IConfiguration object to DBConnectionFactory
             var dbConnectionFactory = new DBConnectionFactory(configWithConn);
 
-            var service = new OneSpanService(options, logger, dbConnectionFactory);
+            // Mock the IasService dependency
+            var mockIasService = new Mock<IasService>();
+
+            // Create the OneSpanService instance with all required dependencies
+            var service = new OneSpanService(options, logger, dbConnectionFactory, mockIasService.Object);
 
             // Create a mock or sample BeneficiaryRequest object    
             var beneficiaryRequest = new BeneficiaryRequest
             {
-                // Correctly populate the required properties of BeneficiaryRequest  
                 SignerFirstName = "Ann1",
                 SignerLastName = "Smith1",
                 SignerEmail = "natashagor@hotmail.com",
-                DateOfBirth = "01/15/1980",
-                Last4SSN = "1234",
+                SignerDateOfBirth = "01/15/1980",
+                SignerLast4SSN = "1234",
                 DesignationId = "544346522",
                 CN = "12345",
                 PdfFieldValues = new Dictionary<string, string>
                    {
-                       { "OwnerName", "John Doe" },
+                       { "OwnerName", $"Smith1 G Ann1" },
+                       { "OwnerSSN", "XXX-XX-1234" },
+                       { "InsuredName", "John Adam Doe" },
                        { "PolNumber", "12345679" },
-                       { "P1Nam", "Jane Smith" },
+                       { "InfoBen1Name", "Green Jerom Michael" },
+                       { "InfoBen1SSN", "XXX-XX-1237" },
+                       { "nfoBen1Address", "123 Old Reston Ave Reston VA 20190" },
+                       { "InfoBen1Email", "jeromgreen@aafmaa.com" },
+                       { "InfoBen1Phone", "5711231234" },
+                       { "P1N", "Jane Smith" },
+                       { "P1B", "01/01/1995" },
                        { "P1Rel", "Spouse" },
-                       { "P1%", "100" }
+                       { "P1%", "100" },
+                       { "PerStirpes", "True" },
+                       { "Disaster", "No" },
+                       { "Days", "14" }
                    }
             };
 
             // Act    
-            var result = service.GetSignature(beneficiaryRequest);
+            var result = service.GetDesignationSignature(beneficiaryRequest);
 
             // Assert    
             Assert.False(string.IsNullOrWhiteSpace(result));
@@ -99,18 +114,22 @@ namespace OneSpanWebApi.Tests
             // Retrieve CallbackKey and ConnectionString from secrets
             var callbackKey = configuration["Onespan:CallbackKey"];
             var apiKey = configuration["Onespan:apiKey"];
+            var GemBoxPdf = configuration["Onespan:GemBoxPdfLicense"];
+            var GemBoxDoc = configuration["Onespan:GemBoxDocumentLicense"];
             var connectionString = configuration.GetConnectionString("DefaultConnection")
                 ?? configuration["ConnectionStrings:DefaultConnection"]; // fallback if needed
 
-
             // Arrange    
-            var options = Options.Create(new OneSpanOptions
+            var options = Options.Create(new OneSpanConfig
             {
                 BaseApiUrl = "https://sandbox.esignlive.com",
                 ApiKey = apiKey,
                 DocPath = @"C:\Users\ngorbatovskikh\source\repos\OneSpanWebApi\OneSpanWebApi\",
                 SenderEmail = "ngorbatovskikh@metrostar.com",
-                CallbackKey = callbackKey
+                CallbackKey = callbackKey,
+                DocExperationDays = 1,
+                GemBoxDocumentLicense = GemBoxDoc,
+                GemBoxPdfLicense = GemBoxPdf
             });
 
             var logger = NullLogger<OneSpanService>.Instance;
@@ -119,24 +138,26 @@ namespace OneSpanWebApi.Tests
             var configWithConn = new ConfigurationBuilder()
                 .AddInMemoryCollection(new Dictionary<string, string?>
                 {
-            { "ConnectionStrings:DefaultConnection", connectionString }
+                       { "ConnectionStrings:DefaultConnection", connectionString }
                 })
                 .Build();
 
             // Pass the IConfiguration object to DBConnectionFactory
             var dbConnectionFactory = new DBConnectionFactory(configWithConn);
 
-            var service = new OneSpanService(options, logger, dbConnectionFactory);
+            // Mock the IasService dependency
+            var mockIasService = new Mock<IasService>();
+            
+            // Create the OneSpanService instance with all required dependencies
+            var service = new OneSpanService(options, logger, dbConnectionFactory, mockIasService.Object);
 
             var designationId = "544646522";
+
             // Act    
             await service.CancelPackageAsync(designationId);
 
             // Assert    
             Assert.True(true);
         }
-
-     
-       
     }
 }

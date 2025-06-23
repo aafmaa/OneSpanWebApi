@@ -6,6 +6,16 @@ using OneSpanWebApi.Data;
 using OneSpanWebApi.Models;
 using OneSpanWebApi.Data;
 using System;
+using GemBox.Document;
+using GemBox.Pdf;
+using GemBox.Pdf.Forms;
+using Azure.Identity;
+using static System.Runtime.InteropServices.JavaScript.JSType;
+using System.Reflection.Metadata;
+using System.Linq;
+using System.Text.RegularExpressions;
+using System.Text;
+
 
 namespace OneSpanWebApi.Services
 {
@@ -16,11 +26,15 @@ namespace OneSpanWebApi.Services
         private readonly string _docPath;
         private readonly string _apiKey;
         private readonly string _senderEmail;
+        private readonly int _docExperationDays;
         private readonly ILogger<OneSpanService> _logger;
         private readonly OssClient _ossClient;
         private readonly DBConnectionFactory _dbConnectionFactory;
+        private readonly IasService _iasService;
+        private readonly string _GemBoxDocumentLicense;
+        private readonly string _GemBoxPdfLicense;
 
-        public OneSpanService(IOptions<OneSpanOptions> options, ILogger<OneSpanService> logger, DBConnectionFactory dbConnectionFactory)
+        public OneSpanService(IOptions<OneSpanConfig> options, ILogger<OneSpanService> logger, DBConnectionFactory dbConnectionFactory, IasService iasService)
         {
             var config = options.Value;
             _baseApiUrl = config.BaseApiUrl;
@@ -29,19 +43,25 @@ namespace OneSpanWebApi.Services
             _apiKey = config.ApiKey;
             _logger = logger;
             _senderEmail = config.SenderEmail;
+            _docExperationDays = config.DocExperationDays;
             _ossClient = new OssClient(_apiKey, _apiUrl);
             _dbConnectionFactory = dbConnectionFactory;
+            _GemBoxDocumentLicense = config.GemBoxDocumentLicense;
+            _GemBoxPdfLicense = config.GemBoxPdfLicense;
+            _iasService = iasService;
         }
 
        
-        public string GetSignature(BeneficiaryRequest beneficiaryRequest)
+        public string GetDesignationSignature(BeneficiaryRequest beneficiaryRequest)
         {
-            _logger.LogInformation("Starting GetSignature");
+            _logger.LogInformation("Starting GetDesignationSignature");
             try
             {
-                string path = Path.Combine(_docPath, "Templates", "Beneficiary Designation.pdf");
-                
-                FileStream fs = File.OpenRead(path);
+                //string path = Path.Combine(_docPath, "Templates", "BeneficiaryDesignation.pdf");
+
+                //FileStream fs = File.OpenRead(path);
+                MemoryStream ms = new MemoryStream(FillPdfForm(TemplateName.BeneficiaryDesignation, beneficiaryRequest));
+
                 FieldBuilder date = FieldBuilder.SignatureDate();
                 date.WithPositionExtracted();
                 date.WithName("Signer1.Date");
@@ -51,18 +71,19 @@ namespace OneSpanWebApi.Services
                 //.WithEmailMessage("Hello Dear Signer. This is custom email message")
                 .WithSenderInfo(SenderInfoBuilder.NewSenderInfo(_senderEmail)) //sender invitation needs to be added thru portal under senders tab. this was returnong error - not sure if we can assign sender dynamically
                 .WithSettings(DocumentPackageSettingsBuilder.NewDocumentPackageSettings()
-                        //.WithoutWatermark()
+                        .WithDefaultTimeBasedExpiry()
+                        .WithRemainingDays(_docExperationDays) 
                         )
                 .WithSigner(SignerBuilder.NewSignerWithEmail(beneficiaryRequest.SignerEmail)
                         .WithFirstName(beneficiaryRequest.SignerFirstName)
                         .WithLastName(beneficiaryRequest.SignerLastName)
                         .ChallengedWithQuestions(
-                            ChallengeBuilder.FirstQuestion("What is your date of birth?").Answer(beneficiaryRequest.DateOfBirth)
-                                            .SecondQuestion("What are the last 4 digits of your SSN?").Answer(beneficiaryRequest.Last4SSN)
+                            ChallengeBuilder.FirstQuestion("What is your date of birth?").Answer(beneficiaryRequest.SignerDateOfBirth)
+                                            .SecondQuestion("What are the last 4 digits of your SSN?").Answer(beneficiaryRequest.SignerLast4SSN)
                         )
                       )
                 .WithDocument(DocumentBuilder.NewDocumentNamed("Beneficiary Designation")
-                        .FromStream(fs, DocumentType.PDF)
+                        .FromStream(ms, DocumentType.PDF)
                         .EnableExtraction()
                 .WithSignature(SignatureBuilder
                         .SignatureFor(beneficiaryRequest.SignerEmail)
@@ -94,7 +115,9 @@ namespace OneSpanWebApi.Services
         private void SaveSignaturePackageId(string packageId, BeneficiaryRequest beneficiaryRequest)
         {
             try 
-            { 
+            {
+                _logger.LogInformation($"Saving signature package ID: {packageId}");
+
                 using var connection = _dbConnectionFactory.CreateConnection();
                 connection.Open();
                 using var command = connection.CreateCommand();
@@ -134,11 +157,11 @@ namespace OneSpanWebApi.Services
 
                 command.ExecuteNonQuery();
 
-                _logger.LogInformation("Signature package id saved: PackageId={PackageId}, SignerEmail={SignerEmail}, DesignationId={DesignationId}, CN={CN}, Canceled={Canceled}", packageId, beneficiaryRequest.SignerEmail, beneficiaryRequest.DesignationId, beneficiaryRequest.CN, 0);
+                _logger.LogInformation($"Signature package id saved: PackageId={packageId}, SignerEmail={beneficiaryRequest.SignerEmail}, DesignationId={beneficiaryRequest.DesignationId}, CN={beneficiaryRequest.CN}, Canceled=0");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error saving signature package: PackageId={PackageId}, SignerEmail={SignerEmail}, DesignationId={DesignationId}", packageId, beneficiaryRequest.SignerEmail, beneficiaryRequest.DesignationId);
+                _logger.LogError(ex, $"Error saving signature package: PackageId={packageId}, SignerEmail={beneficiaryRequest.SignerEmail}, DesignationId={beneficiaryRequest.DesignationId}");
                 throw;
             }
         }
@@ -147,6 +170,8 @@ namespace OneSpanWebApi.Services
         {
             try
             {
+                _logger.LogInformation($"Updating signature package ID for DesignationId={designationId}");
+
                 using var connection = _dbConnectionFactory.CreateConnection();
                 connection.Open();
                 using var command = connection.CreateCommand();
@@ -159,11 +184,11 @@ namespace OneSpanWebApi.Services
                 command.Parameters.Add(designationIdParameter);
 
                 int rowsAffected = command.ExecuteNonQuery();
-                _logger.LogInformation("Updated Canceled field to true for DesignationId={DesignationId}. Rows affected: {RowsAffected}", designationId, rowsAffected);
+                _logger.LogInformation($"Updated Canceled field to true for DesignationId={designationId}. Rows affected: {rowsAffected}");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error updating Canceled field for DesignationId={DesignationId}", designationId);
+                _logger.LogError(ex, $"Error updating Canceled field for DesignationId={designationId}");
                 throw;
             }
         }
@@ -172,7 +197,7 @@ namespace OneSpanWebApi.Services
         {
             try
             {
-                _logger.LogInformation("Starting DownloadSignedDocumentAsync for PackageId={PackageId}", packageId);
+                _logger.LogInformation($"Starting DownloadSignedDocumentAsync for PackageId={packageId}");
 
                 //var documents = _ossClient.PackageService.DownloadZippedDocuments(new PackageId(packageId)); //use this if you want to download all documents in a package as a zip file
 
@@ -183,11 +208,27 @@ namespace OneSpanWebApi.Services
                 await fs.WriteAsync(document, 0, document.Length); // Fix: Use WriteAsync to write the byte array to the file stream.
 
                 _logger.LogInformation("Signed document downloaded and saved to {TempPath} for PackageId={PackageId}", path, packageId);
+
+                //todo: save documents to DAL and Update IAS with Designation Status set to Finalized?
+                int designationid = this.GetDesignationId(packageId);
+
+                if (designationid > 0)
+                {
+                    //call IAS to Update Designation Status to Finalized
+                    _logger.LogInformation($"Finalizing designation with ID: {designationid}");
+
+                    var res = _iasService.DesignationUpdate(designationid);
+
+                    if (res != null) {
+                        _logger.LogInformation($"Finalize designation IAS Response: {res} for designationid {designationid}");
+                    }
+                }
+
                 return path;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error downloading signed document for PackageId={PackageId}", packageId);
+                _logger.LogError(ex, $"Error downloading signed document for PackageId={packageId}");
                 throw;
             }
         }
@@ -224,6 +265,7 @@ namespace OneSpanWebApi.Services
         {
             try
             {
+                _logger.LogInformation($"Retrieving PackageId for DesignationId={designationId}");
                 using var connection = _dbConnectionFactory.CreateConnection();
                 connection.Open();
                 using var command = connection.CreateCommand();
@@ -238,20 +280,118 @@ namespace OneSpanWebApi.Services
                 var result = command.ExecuteScalar();
                 if (result != null && result != DBNull.Value)
                 {
-                    _logger.LogInformation("Retrieved PackageId={PackageId} for DesignationId={DesignationId}", result.ToString(), designationId);
+                    _logger.LogInformation($"Retrieved PackageId={result.ToString()} for DesignationId={designationId}");
                     return result.ToString();
                 }
                 else
                 {
-                    _logger.LogWarning("No PackageId found for DesignationId={DesignationId}", designationId);
+                    _logger.LogWarning($"No PackageId found for DesignationId={designationId}");
                     return null;
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error retrieving PackageId for DesignationId={DesignationId}", designationId);
+                _logger.LogError(ex, $"Error retrieving PackageId for DesignationId={designationId}");
                 throw;
             }
+        }
+
+        public int GetDesignationId(string packageId)
+        {
+            try
+            {
+                _logger.LogInformation($"Retrieving DesignationId for PackageId={packageId}");
+                using var connection = _dbConnectionFactory.CreateConnection();
+                connection.Open();
+                using var command = connection.CreateCommand();
+                command.CommandText = "OneSpanPackage_GetDesignationId";
+                command.CommandType = System.Data.CommandType.StoredProcedure;
+
+                var packageIdParameter = command.CreateParameter();
+                packageIdParameter.ParameterName = "@PackageId";
+                packageIdParameter.Value = packageId; //int.TryParse(packageId, out var id) ? id : (object)DBNull.Value;
+                command.Parameters.Add(packageIdParameter);
+
+                var result = command.ExecuteScalar();
+
+                int designationId = 0;
+                int.TryParse(result?.ToString(), out designationId);
+
+                if (result != null && result != DBNull.Value)
+                {
+                    _logger.LogInformation($"Retrieved DesignationId={designationId.ToString()} for PackageId={packageId}");
+                    return designationId;
+                }
+                else
+                {
+                    _logger.LogWarning($"No DesignationId found for PackageId={packageId}");
+                    return designationId;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error retrieving DesignationId for PackageId={packageId}");
+                throw;
+            }
+        }
+
+        public Byte[] FillPdfForm(TemplateName templateName, BeneficiaryRequest beneficiaryRequest)
+        {
+            _logger.LogInformation("Starting FillPdfForm");
+            try
+            {
+                string path = Path.Combine(_docPath, "Templates", $"{templateName.ToString()}.pdf");
+                if (!File.Exists(path))
+                {
+                    _logger.LogError($"PDF template not found at path: {path}");
+                    throw new FileNotFoundException("PDF template not found", path);
+                }
+
+                GemBox.Pdf.ComponentInfo.SetLicense(_GemBoxPdfLicense); //("AN-2023May26-vQYQH4jEP6VLkQ408dBOHSZIjtopp5b5bOfLs0SuLFNvBsBGWTlK0sEtqvqeB078/k2YA2BLrXZ1oAIAkVR3sFDWFXg==A");
+                GemBox.Document.ComponentInfo.SetLicense(_GemBoxDocumentLicense); //("DN-2023May26-ZWweOk8La1x368wzUnsol6R7xpHa7qx7vRB6OgjIYxjC7dfKDC2y9iju20tG7vPnlY6hbtAGm9yUzZluXJ9Sfacq5TA==A");
+
+                byte[] file = File.ReadAllBytes(path);
+                using (var document = PdfDocument.Load(new MemoryStream(file)))
+                {
+                    if (document.Form?.Fields != null)
+                    {
+                        foreach (var kvp in beneficiaryRequest.PdfFieldValues)
+                        {
+                            var field = document.Form.Fields.FirstOrDefault(f => f.Name == kvp.Key);
+                            if (field != null)
+                            {
+                                field.Value = kvp.Value;
+
+                                // make some fields read-only if desired
+                                //if (IsReadOnlyField(kvp.Key))
+                                field.ReadOnly = true;
+                            }
+                            else
+                            {
+                                _logger.LogWarning($"PDF field '{kvp.Key}' not found in template.");
+                            }
+                        }
+                    }
+
+                    using (var output = new MemoryStream())
+                    {
+                        document.Save(output, GemBox.Pdf.SaveOptions.Pdf);
+
+                        return output.ToArray();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error filling PDF form");
+                throw;
+            }
+        }
+
+        /// Check if the field name matches the pattern for read-only fields: P1N, P2Rel, S4B, S5% etc.
+        private bool IsReadOnlyField(string fieldName)
+        {
+            return Regex.IsMatch(fieldName, @"^(P[1-5]|S[1-5])(N|B|Rel|%)$");
         }
 
 
@@ -309,5 +449,13 @@ namespace OneSpanWebApi.Services
         //}
 
 
+    }
+
+    public enum TemplateName
+    {
+        BeneficiaryDesignation,
+        MemberApplication,
+        SimpleTermPackage
+        // Add more as needed
     }
 }
