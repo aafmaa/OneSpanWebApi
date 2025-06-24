@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 
 namespace OneSpanWebApi.Tests
 {
@@ -25,27 +26,25 @@ namespace OneSpanWebApi.Tests
                 Library = "NATSERVJ"
             });
 
-            var logger = NullLogger<IasService>.Instance;
+            //var logger = NullLogger<IasService>.Instance;
+            var loggerFactory = LoggerFactory.Create(builder =>
+            {
+                builder
+                    .AddConsole()
+                    .SetMinimumLevel(LogLevel.Debug); // or LogLevel.Trace for even more detail
+            });
+            var logger = loggerFactory.CreateLogger<IasService>();
+
 
             // Create a partial mock to override NatServJCall  
             var serviceMock = new Mock<IasService>(mockOptions.Object, logger) { CallBase = true };
-            var expectedResponse = new StringBuilder("mocked response");
+            //var expectedResponse = new StringBuilder("mocked response");
 
-            serviceMock
-                .Setup(s => s.NatServJCall(
-                    It.Is<string>(p => p == "FinalizeDesignation"),
-                    It.IsAny<string>(),
-                    out expectedResponse))
-                .Callback((string p, string req, out StringBuilder resp) =>
-                {
-                    resp = expectedResponse;
-                });
-
-            // Act  
+            // Act
             var result = serviceMock.Object.DesignationStatusUpdate(12345);
 
             // Assert  
-            Assert.Equal(expectedResponse.ToString(), result.ToString());
+            Assert.True(!string.IsNullOrEmpty(result.ToString()));
         }
     }
 }

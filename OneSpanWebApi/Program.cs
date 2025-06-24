@@ -39,25 +39,13 @@ builder.Services.AddTransient<OneSpanService>();
 builder.Services.Configure<IasClientConfig>(builder.Configuration.GetSection("IasClient"));
 
 // Register the IasService with dependency injection
-builder.Services.AddScoped<IasService>();
+builder.Services.AddTransient<IasService>();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddMicrosoftIdentityWebApi(builder.Configuration.GetSection("AzureAd"));
 
-//set GemBox license key
-string? licenseKeyDoc = builder.Configuration["GemBox:GemBoxDocumentLicense"];
-if (!string.IsNullOrEmpty(licenseKeyDoc))
-{
-    ComponentInfo.SetLicense(licenseKeyDoc);
-}
-else
-{
-    // Handle the case where the license key is null or empty.  
-    throw new InvalidOperationException("GemBox license key is not configured.");
-}
-//ComponentInfo.SetLicense("FREE-LIMITED-KEY");
 
 var app = builder.Build();
 

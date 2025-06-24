@@ -57,9 +57,6 @@ namespace OneSpanWebApi.Services
             _logger.LogInformation("Starting GetDesignationSignature");
             try
             {
-                //string path = Path.Combine(_docPath, "Templates", "BeneficiaryDesignation.pdf");
-
-                //FileStream fs = File.OpenRead(path);
                 MemoryStream ms = new MemoryStream(FillPdfForm(TemplateName.BeneficiaryDesignation, beneficiaryRequest));
 
                 FieldBuilder date = FieldBuilder.SignatureDate();
@@ -94,7 +91,6 @@ namespace OneSpanWebApi.Services
                         )
                 ).Build();
 
-                //Debug.WriteLine("superDuperPackage: " + superDuperPackage.ToString())
                 PackageId packageId = _ossClient.CreatePackageOneStep(superDuperPackage);
 
                 _ossClient.SendPackage(packageId);
@@ -217,7 +213,7 @@ namespace OneSpanWebApi.Services
                     //call IAS to Update Designation Status to Finalized
                     _logger.LogInformation($"Finalizing designation with ID: {designationid}");
 
-                    var res = _iasService.DesignationUpdate(designationid);
+                    var res = _iasService.DesignationStatusUpdate(designationid);
 
                     if (res != null) {
                         _logger.LogInformation($"Finalize designation IAS Response: {res} for designationid {designationid}");
@@ -347,8 +343,8 @@ namespace OneSpanWebApi.Services
                     throw new FileNotFoundException("PDF template not found", path);
                 }
 
-                GemBox.Pdf.ComponentInfo.SetLicense(_GemBoxPdfLicense); //("AN-2023May26-vQYQH4jEP6VLkQ408dBOHSZIjtopp5b5bOfLs0SuLFNvBsBGWTlK0sEtqvqeB078/k2YA2BLrXZ1oAIAkVR3sFDWFXg==A");
-                GemBox.Document.ComponentInfo.SetLicense(_GemBoxDocumentLicense); //("DN-2023May26-ZWweOk8La1x368wzUnsol6R7xpHa7qx7vRB6OgjIYxjC7dfKDC2y9iju20tG7vPnlY6hbtAGm9yUzZluXJ9Sfacq5TA==A");
+                GemBox.Pdf.ComponentInfo.SetLicense(_GemBoxPdfLicense); 
+                GemBox.Document.ComponentInfo.SetLicense(_GemBoxDocumentLicense); 
 
                 byte[] file = File.ReadAllBytes(path);
                 using (var document = PdfDocument.Load(new MemoryStream(file)))

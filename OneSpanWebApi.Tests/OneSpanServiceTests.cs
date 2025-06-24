@@ -32,6 +32,8 @@ namespace OneSpanWebApi.Tests
             // Retrieve CallbackKey and ConnectionString from secrets
             var callbackKey = configuration["Onespan:CallbackKey"];
             var apiKey = configuration["Onespan:apiKey"];
+            var gemBoxPdfLisence = configuration["Onespan:GemBoxPdfLicense"];
+            var gemBoxDocumentLisence = configuration["Onespan:GemBoxDocumentLicense"];
             var connectionString = configuration.GetConnectionString("DefaultConnection")
                 ?? configuration["ConnectionStrings:DefaultConnection"]; // fallback if needed
 
@@ -43,7 +45,9 @@ namespace OneSpanWebApi.Tests
                 DocPath = @"C:\Users\ngorbatovskikh\source\repos\OneSpanWebApi\OneSpanWebApi\",
                 SenderEmail = "ngorbatovskikh@metrostar.com",
                 CallbackKey = callbackKey,
-                DocExperationDays = 1 // Set the expiration days for the document
+                DocExperationDays = 1,
+                GemBoxDocumentLicense = gemBoxDocumentLisence,
+                GemBoxPdfLicense = gemBoxPdfLisence
             });
 
             var logger = NullLogger<OneSpanService>.Instance;
@@ -59,8 +63,25 @@ namespace OneSpanWebApi.Tests
             // Pass the IConfiguration object to DBConnectionFactory
             var dbConnectionFactory = new DBConnectionFactory(configWithConn);
 
+            var config = new IasClientConfig
+            {
+                Uri = new Uri("https://example.com/"),
+                Environment = "TestEnv",
+                Library = "TestLib"
+            };
+
             // Mock the IasService dependency
-            var mockIasService = new Mock<IasService>();
+            
+            var mockIasOptions = new Mock<IOptions<IasClientConfig>>();
+            mockIasOptions.Setup(o => o.Value).Returns(new IasClientConfig
+            {
+                Uri = new Uri("http://rh-test.aafmaa.local:7777"),
+                Environment = "PARM=NAT227 etid=$$ bp=WEBBP",
+                Library = "NATSERVJ"
+            });
+
+            var mockIasService = new Mock<IasService>(mockIasOptions.Object, Mock.Of<ILogger<IasService>>());
+
 
             // Create the OneSpanService instance with all required dependencies
             var service = new OneSpanService(options, logger, dbConnectionFactory, mockIasService.Object);
@@ -73,7 +94,7 @@ namespace OneSpanWebApi.Tests
                 SignerEmail = "natashagor@hotmail.com",
                 SignerDateOfBirth = "01/15/1980",
                 SignerLast4SSN = "1234",
-                DesignationId = "544346522",
+                DesignationId = "544346528",
                 CN = "12345",
                 PdfFieldValues = new Dictionary<string, string>
                    {
@@ -90,8 +111,8 @@ namespace OneSpanWebApi.Tests
                        { "P1B", "01/01/1995" },
                        { "P1Rel", "Spouse" },
                        { "P1%", "100" },
-                       { "PerStirpes", "True" },
-                       { "Disaster", "No" },
+                       { "PerStirpes", "1" },
+                       { "Disaster", "no" },
                        { "Days", "14" }
                    }
             };

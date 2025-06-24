@@ -59,12 +59,30 @@ namespace OneSpanWebApi.Services
                 { "data", requestData }
             };
 
-            var encodedItems = formParameters.Select(i => WebUtility.UrlEncode(i.Key) + "=" + WebUtility.UrlEncode(i.Value));
-            var encodedContent = new StringContent(string.Join("&", encodedItems), null, "application/x-www-form-urlencoded");
+            try
+            {
+                var encodedItems = formParameters.Select(i => WebUtility.UrlEncode(i.Key) + "=" + WebUtility.UrlEncode(i.Value));
+                var encodedContent = new StringContent(string.Join("&", encodedItems), null, "application/x-www-form-urlencoded");
 
-            var response = await httpClient.PostAsync(nniUri, encodedContent);
-            response.EnsureSuccessStatusCode();
-            return await response.Content.ReadAsStringAsync();
+                _logger.LogInformation($"Request to {nniUri}: {encodedContent.ReadAsStringAsync().Result}");
+
+                var response = await httpClient.PostAsync(nniUri, encodedContent);
+                response.EnsureSuccessStatusCode();
+
+                // Log the response status code
+                _logger.LogInformation($"Response from {nniUri}: {response.StatusCode}");
+                if (response.StatusCode != HttpStatusCode.OK)
+                {
+                    _logger.LogError($"Error querying Ias: {response.StatusCode}");
+                    return string.Empty;
+                }
+                return await response.Content.ReadAsStringAsync();
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogError($"Error querying Ias: {ex.Message}");
+                return string.Empty;
+            }
         }
 
         public StringBuilder DesignationStatusUpdate(int designationid)
@@ -74,8 +92,14 @@ namespace OneSpanWebApi.Services
             JObject request = new JObject();
             request.Add("designationid", designationid);
             request.Add("status", "final");
+            request.Add("signatureDate", DateTime.Now.ToString("MM-dd-yyyy"));
 
-            this.NatServJCall("FinalizeDesignation", request.ToString(), out response);   
+            _logger.LogInformation($"Request to finalize designation: {request.ToString()}");
+
+            this.NatServJCall("FinalizeDesignation", request.ToString(), out response);
+
+            _logger.LogInformation($"Response from FinalizeDesignation: {response.ToString()}");
+
             return response;
         }
     }
