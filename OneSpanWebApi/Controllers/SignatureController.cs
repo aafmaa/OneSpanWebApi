@@ -64,7 +64,7 @@ namespace OneSpanWebApi.Controllers
         }
 
         [HttpPost("cancel/{designationId}")]
-        public async Task<IActionResult> CancelPackage(string designationId)
+        public async Task<IActionResult> CancelSignaturePackage(string designationId)
         {
             try
             {
@@ -75,7 +75,7 @@ namespace OneSpanWebApi.Controllers
                     return BadRequest("Designation ID cannot be null or empty.");
                 }
                 // Call the service to cancel the package
-                await _oneSpanService.CancelPackageAsync(designationId);
+                await _oneSpanService.CancelSignaturePackageAsync(designationId);
                 // Log the successful cancellation
                 _logger.LogInformation($"Package with designationId {designationId} has been canceled successfully.");
                 // Return a success response

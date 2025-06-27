@@ -15,6 +15,7 @@ using System.Reflection.Metadata;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Text;
+using System.Globalization;
 
 
 namespace OneSpanWebApi.Services
@@ -206,19 +207,7 @@ namespace OneSpanWebApi.Services
                 _logger.LogInformation("Signed document downloaded and saved to {TempPath} for PackageId={PackageId}", path, packageId);
 
                 //todo: save documents to DAL and Update IAS with Designation Status set to Finalized?
-                int designationid = this.GetDesignationId(packageId);
-
-                if (designationid > 0)
-                {
-                    //call IAS to Update Designation Status to Finalized
-                    _logger.LogInformation($"Finalizing designation with ID: {designationid}");
-
-                    var res = _iasService.DesignationStatusUpdate(designationid);
-
-                    if (res != null) {
-                        _logger.LogInformation($"Finalize designation IAS Response: {res} for designationid {designationid}");
-                    }
-                }
+                this.UpdateDesignationStatus(packageId, DesignationStatus.Final);
 
                 return path;
             }
@@ -229,7 +218,25 @@ namespace OneSpanWebApi.Services
             }
         }
 
-        public async Task CancelPackageAsync(string designationId)
+        public void UpdateDesignationStatus(string packageId, DesignationStatus designationStatus)
+        {
+            int designationid = this.GetDesignationId(packageId);
+
+            if (designationid > 0)
+            {
+                //call IAS to Update Designation Status
+                _logger.LogInformation($"Update designation status to {designationStatus.ToString()} for designationid: {designationid}");
+
+                var res = _iasService.DesignationStatusUpdate(designationid, designationStatus);
+
+                if (res != null)
+                {
+                    _logger.LogInformation($"Update designation status IAS Response: {res} for designationid {designationid}");
+                }
+            }
+        }
+
+        public async Task CancelSignaturePackageAsync(string designationId)
         {
             try
             {
@@ -390,6 +397,39 @@ namespace OneSpanWebApi.Services
             return Regex.IsMatch(fieldName, @"^(P[1-5]|S[1-5])(N|B|Rel|%)$");
         }
 
+        //private void RenderFormattedBenes(Dictionary<string, string> pdfFormfields, List<DesignationContact> benes, bool isPrimary, byte maxindex, out byte index)
+        //{
+        //    string pdfFieldType = "P";
+        //    index = 1;
+        //    if (!isPrimary) { pdfFieldType = "S"; }
+        //    foreach (DesignationContact contact in benes)
+        //    {
+        //        if (index < maxindex) //pdf form has only 5 rows
+        //        {
+        //            pdfFormfields.Add(pdfFieldType + index.ToString() + "Nam", (string.IsNullOrEmpty(contact.BeneficiaryName) ? string.Empty : contact.BeneficiaryName));
+        //            pdfFormfields.Add(pdfFieldType + index.ToString() + "N", Utils.MaskSSN(contact.BeneficiarySSN));
+        //            pdfFormfields.Add(pdfFieldType + index.ToString() + "B", (string.IsNullOrEmpty(contact.BeneficiaryBirthDate) ? string.Empty : Utils.USDateFormat(contact.BeneficiaryBirthDate)));
+        //            pdfFormfields.Add(pdfFieldType + index.ToString() + "Rel", (string.IsNullOrEmpty(contact.RelationToInsured) ? string.Empty : CultureInfo.CurrentCulture.TextInfo.ToTitleCase(contact.RelationToInsured.ToLower())));
+        //            pdfFormfields.Add(pdfFieldType + index.ToString() + "%", (string.IsNullOrEmpty(contact.Share) ? string.Empty : this.ShareFormat(contact.Share)));
+        //            pdfFormfields.Add(pdfFieldType + index.ToString() + "S", contact.SettlementCode);
+        //            string restrictedCode = "No";
+        //            if (contact.RestrictedCode) { restrictedCode = "Yes"; }
+        //            pdfFormfields.Add(pdfFieldType + index.ToString() + "R", restrictedCode);
+        //            index += 1;
+        //        }
+        //    }
+        //}
+
+        private string ShareFormat(string share)
+        {
+            if (!share.Contains("/"))
+            {
+                share += " %";
+            }
+            return share;
+        }
+
+
 
         //public void createPackageFromTemplate()
         //{
@@ -453,5 +493,13 @@ namespace OneSpanWebApi.Services
         MemberApplication,
         SimpleTermPackage
         // Add more as needed
+    }
+
+    public enum DesignationStatus
+    {
+        Pending,
+        Final,
+        Expired,
+        Canceled
     }
 }

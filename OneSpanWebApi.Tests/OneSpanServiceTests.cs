@@ -43,7 +43,7 @@ namespace OneSpanWebApi.Tests
                 BaseApiUrl = "https://sandbox.esignlive.com",
                 ApiKey = apiKey,
                 DocPath = @"C:\Users\ngorbatovskikh\source\repos\OneSpanWebApi\OneSpanWebApi\",
-                SenderEmail = "ngorbatovskikh@metrostar.com",
+                SenderEmail = "ngorbatovskikh@aafmaa.com",
                 CallbackKey = callbackKey,
                 DocExperationDays = 1,
                 GemBoxDocumentLicense = gemBoxDocumentLisence,
@@ -94,7 +94,7 @@ namespace OneSpanWebApi.Tests
                 SignerEmail = "natashagor@hotmail.com",
                 SignerDateOfBirth = "01/15/1980",
                 SignerLast4SSN = "1234",
-                DesignationId = "544346528",
+                DesignationId = "2",
                 CN = "12345",
                 PdfFieldValues = new Dictionary<string, string>
                    {
@@ -111,8 +111,8 @@ namespace OneSpanWebApi.Tests
                        { "P1B", "01/01/1995" },
                        { "P1Rel", "Spouse" },
                        { "P1%", "100" },
-                       { "PerStirpes", "1" },
-                       { "Disaster", "no" },
+                       { "PerStirpes", "N" },
+                       { "Disaster", "Y" },
                        { "Days", "14" }
                    }
             };
@@ -146,7 +146,7 @@ namespace OneSpanWebApi.Tests
                 BaseApiUrl = "https://sandbox.esignlive.com",
                 ApiKey = apiKey,
                 DocPath = @"C:\Users\ngorbatovskikh\source\repos\OneSpanWebApi\OneSpanWebApi\",
-                SenderEmail = "ngorbatovskikh@metrostar.com",
+                SenderEmail = "ngorbatovskikh@aafmaa.com",
                 CallbackKey = callbackKey,
                 DocExperationDays = 1,
                 GemBoxDocumentLicense = GemBoxDoc,
@@ -175,7 +175,7 @@ namespace OneSpanWebApi.Tests
             var designationId = "544646522";
 
             // Act    
-            await service.CancelPackageAsync(designationId);
+            await service.CancelSignaturePackageAsync(designationId);
 
             // Assert    
             Assert.True(true);

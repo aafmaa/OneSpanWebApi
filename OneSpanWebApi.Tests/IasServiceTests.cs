@@ -41,7 +41,7 @@ namespace OneSpanWebApi.Tests
             //var expectedResponse = new StringBuilder("mocked response");
 
             // Act
-            var result = serviceMock.Object.DesignationStatusUpdate(12345);
+            var result = serviceMock.Object.DesignationStatusUpdate(12345, DesignationStatus.Final);
 
             // Assert  
             Assert.True(!string.IsNullOrEmpty(result.ToString()));

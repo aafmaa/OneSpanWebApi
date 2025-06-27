@@ -34,7 +34,7 @@ namespace OneSpanWebApi.Controllers
         {
             try
             {
-                _logger.LogInformation("Received webhook request from OneSpan.");
+                _logger.LogInformation($"Received webhook request from OneSpan: {docPayload.ToString()}");
 
                 if (Request.Headers.ContainsKey("Authorization") && (Request.Headers["Authorization"].ToString() == _authKey))
                 {
@@ -51,10 +51,12 @@ namespace OneSpanWebApi.Controllers
                             string? documentId = payloadJason["documentId"]?.ToString();
                             string? createdDate = payloadJason["createdDate"]?.ToString();
 
-                            _logger.LogInformation($"Received signed document from OneSpan: event={eventName}, packageId={packageId}, documentId={documentId}");
+
 
                             if (!string.IsNullOrEmpty(packageId) && eventName?.ToUpper() == "DOCUMENT_SIGNED" && !string.IsNullOrEmpty(documentId) && documentId.ToLower() != "default-consent")
                             {
+                                _logger.LogInformation($"Received signed document from OneSpan: event={eventName}, packageId={packageId}, documentId={documentId}");
+
                                 try
                                 {   // Download the signed document
                                     string path = await _oneSpanService.DownloadSignedDocumentAsync(packageId, documentId);
@@ -64,6 +66,20 @@ namespace OneSpanWebApi.Controllers
                                 {
                                     _logger.LogError(ex, $"Error downloading signed document for packageId={packageId}, documentId={documentId}");
                                     return StatusCode((int)HttpStatusCode.InternalServerError, "Error processing signed document");
+                                }
+                            }
+                            else if (!string.IsNullOrEmpty(packageId) && eventName?.ToUpper() == "PACKAGE_EXPIRE")
+                            {
+                                try
+                                {
+                                    _logger.LogInformation($"Received expired document notification from OneSpan: event={eventName}, packageId={packageId}");
+                                    // Handle the expired document logic here
+                                    _oneSpanService.UpdateDesignationStatus(packageId, DesignationStatus.Expired);
+                                }
+                                catch (Exception ex)
+                                {
+                                    _logger.LogError(ex, $"Error handling expired document for packageId={packageId}");
+                                    return StatusCode((int)HttpStatusCode.InternalServerError, "Error processing expired document");
                                 }
                             }
                         }

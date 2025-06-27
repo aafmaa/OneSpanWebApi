@@ -85,18 +85,21 @@ namespace OneSpanWebApi.Services
             }
         }
 
-        public StringBuilder DesignationStatusUpdate(int designationid)
+        public StringBuilder DesignationStatusUpdate(int designationid, DesignationStatus designationStatus)
         {
             StringBuilder response = new StringBuilder();
 
             JObject request = new JObject();
             request.Add("designationid", designationid);
-            request.Add("status", "final");
-            request.Add("signatureDate", DateTime.Now.ToString("MM-dd-yyyy"));
+            request.Add("status", designationStatus.ToString().ToLower());
+            if (designationStatus == DesignationStatus.Final)
+            {
+                request.Add("signatureDate", DateTime.Now.ToString("MM-dd-yyyy"));
+            }
 
-            _logger.LogInformation($"Request to finalize designation: {request.ToString()}");
+            _logger.LogInformation($"Request to finalize/or expire designation: {request.ToString()}");
 
-            this.NatServJCall("FinalizeDesignation", request.ToString(), out response);
+            this.NatServJCall("DesignationStatusUpdate", request.ToString(), out response);
 
             _logger.LogInformation($"Response from FinalizeDesignation: {response.ToString()}");
 
